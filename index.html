@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة تتبع الشحنات والأسطول | Logistics Insight</title>
+    
+    <!-- Google Font: Cairo -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Cairo', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#2563eb',
+                            600: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#0f172a', // Deep slate/navy
+                            950: '#0b0f19',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet JS Map CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #f8fafc;
+        }
+        /* Custom scrollbar for modern look */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        #tracking-map {
+            height: 240px;
+            width: 100%;
+            border-radius: 0.75rem;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col justify-between">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-slate-900 text-white sticky top-0 z-30 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Logo & Brand Name -->
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+                        <i class="fa-solid font-bold fa-truck-fast text-lg"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold tracking-tight text-white leading-tight">لوجستيكس إنسايت</h1>
+                        <p class="text-xs text-slate-400">إدارة الأسطول وتتبع الشحنات</p>
+                    </div>
+                </div>
+
+                <!-- Global Quick Search -->
+                <div class="hidden md:flex items-center flex-1 max-w-md mx-8">
+                    <div class="relative w-full">
+                        <span class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                        </span>
+                        <input type="text" id="global-search" onkeyup="handleGlobalSearch()" 
+                            class="w-full pl-4 pr-10 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                            placeholder="بحث سريع بـ رقم الشحنة أو اسم العميل...">
+                    </div>
+                </div>
+
+                <!-- Right Actions & Profile -->
+                <div class="flex items-center gap-3">
+                    <button id="add-shipment-btn" onclick="openAddModal()" class="hidden sm:flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shadow-sm">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>إضافة شحنة</span>
+                    </button>
+
+                    <button class="relative p-2 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 transition">
+                        <i class="fa-regular fa-bell text-lg"></i>
+                        <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full"></span>
+                    </button>
+
+                    <div class="h-6 w-px bg-slate-700 mx-1 hidden sm:block"></div>
+
+                    <!-- User Profile Dropdown Placeholder -->
+                    <div class="flex items-center gap-2 cursor-pointer p-1 rounded-lg hover:bg-slate-800 transition">
+                        <div class="w-8 h-8 rounded-full bg-slate-700 text-slate-200 flex items-center justify-center font-bold text-xs border border-slate-600">
+                            م.أ
+                        </div>
+                        <span class="text-sm font-medium text-slate-200 hidden md:block">محمود أحمد</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+        
+        <!-- Page Title & Quick Refresh -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div>
+                <h2 class="text-2xl font-bold text-slate-900">نظام إدارة وتتبع الشحنات</h2>
+                <p class="text-sm text-slate-500">استعراض الموقف الحالي لجميع الشحنات ومراحل التوصيل</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="refreshData()" class="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 px-3.5 py-2 rounded-lg text-sm font-medium transition shadow-sm">
+                    <i id="refresh-icon" class="fa-solid fa-rotate-right"></i>
+                    <span>تحديث البيانات</span>
+                </button>
+                <button onclick="exportReport()" class="flex items-center gap-2 bg-slate-900 text-white hover:bg-slate-800 px-3.5 py-2 rounded-lg text-sm font-medium transition shadow-sm">
+                    <i class="fa-solid fa-file-export"></i>
+                    <span>تصدير تقرير</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- KPI Summary Cards Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            <!-- Card 1: Total -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">إجمالي الشحنات</p>
+                    <h3 id="kpi-total" class="text-2xl font-extrabold text-slate-900">0</h3>
+                    <p class="text-xs text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-trend-up"></i>
+                        <span>+12% مقارنة بالأسبوع الماضي</span>
+                    </p>
+                </div>
+                <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-boxes-packing"></i>
+                </div>
+            </div>
+
+            <!-- Card 2: In Transit -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">جاري التوصيل</p>
+                    <h3 id="kpi-transit" class="text-2xl font-extrabold text-blue-600">0</h3>
+                    <p class="text-xs text-slate-500 mt-1">
+                        في الطريق للعملاء
+                    </p>
+                </div>
+                <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-truck-ramp-box"></i>
+                </div>
+            </div>
+
+            <!-- Card 3: Delivered -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">تم التسليم بنجاح</p>
+                    <h3 id="kpi-delivered" class="text-2xl font-extrabold text-emerald-600">0</h3>
+                    <p class="text-xs text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                        <i class="fa-solid fa-check-double"></i>
+                        <span>نسبة نجاح 98.4%</span>
+                    </p>
+                </div>
+                <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-house-circle-check"></i>
+                </div>
+            </div>
+
+            <!-- Card 4: Delayed / Issues -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">شحنات معلقة / تأخير</p>
+                    <h3 id="kpi-delayed" class="text-2xl font-extrabold text-amber-600">0</h3>
+                    <p class="text-xs text-amber-600 font-medium mt-1 flex items-center gap-1">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>تتطلب تدخل الدعم</span>
+                    </p>
+                </div>
+                <div class="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Controls Toolbar -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+            <!-- Filter Tabs -->
+            <div class="flex items-center gap-1 overflow-x-auto pb-2 md:pb-0 scrollbar-none" id="status-filters">
+                <button onclick="setFilter('all')" data-status="all" class="filter-tab active text-sm font-semibold px-4 py-2 rounded-lg whitespace-nowrap bg-slate-900 text-white transition">
+                    الكل <span id="badge-all" class="mr-1 text-xs opacity-75">(0)</span>
+                </button>
+                <button onclick="setFilter('in_transit')" data-status="in_transit" class="filter-tab text-sm font-medium text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-lg whitespace-nowrap transition">
+                    جاري التوصيل <span id="badge-transit" class="mr-1 text-xs text-slate-500">(0)</span>
+                </button>
+                <button onclick="setFilter('delivered')" data-status="delivered" class="filter-tab text-sm font-medium text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-lg whitespace-nowrap transition">
+                    تم التسليم <span id="badge-delivered" class="mr-1 text-xs text-slate-500">(0)</span>
+                </button>
+                <button onclick="setFilter('pending')" data-status="pending" class="filter-tab text-sm font-medium text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-lg whitespace-nowrap transition">
+                    قيد المعالجة <span id="badge-pending" class="mr-1 text-xs text-slate-500">(0)</span>
+                </button>
+                <button onclick="setFilter('delayed')" data-status="delayed" class="filter-tab text-sm font-medium text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-lg whitespace-nowrap transition">
+                    معلقة <span id="badge-delayed" class="mr-1 text-xs text-slate-500">(0)</span>
+                </button>
+            </div>
+
+            <!-- Sorting & Mobile Search -->
+            <div class="flex items-center gap-3">
+                <select id="sort-select" onchange="renderTable()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 outline-none">
+                    <option value="newest">الأحدث أولاً</option>
+                    <option value="oldest">الأقدم أولاً</option>
+                    <option value="customer">حسب اسم العميل</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Shipments Data Table Card -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-right text-sm text-slate-600">
+                    <thead class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase text-xs">
+                        <tr>
+                            <th scope="col" class="px-6 py-4">رقم الشحنة</th>
+                            <th scope="col" class="px-6 py-4">العميل</th>
+                            <th scope="col" class="px-6 py-4">الوجهة</th>
+                            <th scope="col" class="px-6 py-4">المندوب / السائق</th>
+                            <th scope="col" class="px-6 py-4">الحالة</th>
+                            <th scope="col" class="px-6 py-4">آخر تحديث</th>
+                            <th scope="col" class="px-6 py-4 text-center">الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="shipments-table-body" class="divide-y divide-slate-200">
+                        <!-- Rows rendered dynamically via JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Empty State Display -->
+            <div id="empty-state" class="hidden p-12 text-center">
+                <div class="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+                    <i class="fa-solid fa-box-open"></i>
+                </div>
+                <h4 class="text-base font-bold text-slate-800 mb-1">لا توجد نتائج مطابقة</h4>
+                <p class="text-sm text-slate-500 mb-4">جرّب تغيير كلمات البحث أو إعادة ضبط الفلاتر المختارة.</p>
+                <button onclick="resetFilters()" class="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-semibold">
+                    <i class="fa-solid fa-arrow-rotate-left"></i>
+                    <span>إعادة ضبط الفلاتر</span>
+                </button>
+            </div>
+
+            <!-- Table Footer & Pagination -->
+            <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="text-xs text-slate-500">
+                    عرض <span id="showing-start" class="font-bold text-slate-700">1</span> إلى <span id="showing-end" class="font-bold text-slate-700">5</span> من أصل <span id="showing-total" class="font-bold text-slate-700">0</span> شحنة
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="changePage(-1)" id="btn-prev" class="px-3 py-1.5 text-xs font-semibold rounded border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                        السابق
+                    </button>
+                    <span id="page-num" class="text-xs font-bold text-slate-700 px-2">صفحة 1</span>
+                    <button onclick="changePage(1)" id="btn-next" class="px-3 py-1.5 text-xs font-semibold rounded border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                        التالي
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 mt-12 py-6">
+        <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
+            <p>لوجستيكس إنسايت &copy; 2026 - نظام إدارة الشحنات الاحترافي. جميع الحقوق محفوظة.</p>
+        </div>
+    </footer>
+
+    <!-- Shipment Details Modal / Timeline Drawer -->
+    <div id="detail-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 transform scale-95 transition-transform duration-300" id="detail-modal-card">
+            
+            <!-- Modal Header -->
+            <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-20">
+                <div class="flex items-center gap-3">
+                    <span id="modal-status-badge" class="px-3 py-1 rounded-full text-xs font-bold"></span>
+                    <h3 class="text-lg font-bold text-slate-900" id="modal-tracking-id">#TRK-000000</h3>
+                </div>
+                <button onclick="closeDetailModal()" class="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-500 flex items-center justify-center transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Modal Content -->
+            <div class="p-6 space-y-6">
+                <!-- Info Grid -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100 text-xs">
+                    <div>
+                        <span class="text-slate-400 block mb-1">العميل</span>
+                        <strong class="text-slate-800 text-sm block" id="modal-customer">-</strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-1">الجهة / الوجهة</span>
+                        <strong class="text-slate-800 text-sm block" id="modal-destination">-</strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-1">المندوب مسئول التوصيل</span>
+                        <strong class="text-slate-800 text-sm block" id="modal-courier">-</strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-1">وزن الشحنة</span>
+                        <strong class="text-slate-800 text-sm block" id="modal-weight">-</strong>
+                    </div>
+                </div>
+
+                <!-- Interactive Route Map -->
+                <div>
+                    <h4 class="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-map-location-dot text-blue-600"></i>
+                        الموقع والتتبع المباشر
+                    </h4>
+                    <div id="tracking-map" class="shadow-inner border border-slate-200"></div>
+                </div>
+
+                <!-- Timeline / Stepper -->
+                <div>
+                    <h4 class="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-route text-blue-600"></i>
+                        المراحل اللوجستية لشحنتك
+                    </h4>
+                    <div class="relative border-r-2 border-slate-200 mr-3 space-y-6" id="modal-timeline">
+                        <!-- Dynamic timeline items insert here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Actions -->
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
+                <button onclick="closeDetailModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-lg transition">
+                    إغلاق
+                </button>
+                <button onclick="printShipmentLabel()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition">
+                    <i class="fa-solid fa-print"></i>
+                    <span>طباعة بوليصة الشحن</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add New Shipment Modal -->
+    <div id="add-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between mb-4 border-b pb-3">
+                <h3 class="text-lg font-bold text-slate-900">إضافة شحنة جديدة</h3>
+                <button onclick="closeAddModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <form id="add-shipment-form" onsubmit="handleAddShipment(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">اسم العميل</label>
+                    <input type="text" id="input-customer" required class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="مثال: شركة النور للتجارة">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">الوجهة (المدينة)</label>
+                        <input type="text" id="input-destination" required class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="القاهرة، مصر">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">اسم السائق / المندوب</label>
+                        <input type="text" id="input-courier" required class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="عمر خالد">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">الحالة الأوليّة</label>
+                        <select id="input-status" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="pending">قيد المعالجة</option>
+                            <option value="in_transit">جاري التوصيل</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">الوزن (كجم)</label>
+                        <input type="text" id="input-weight" placeholder="2.5 كجم" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+                <div class="pt-4 flex items-center justify-end gap-3">
+                    <button type="button" onclick="closeAddModal()" class="px-4 py-2 border rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100">إلغاء</button>
+                    <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">حفظ وحفظ الشحنة</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification Box -->
+    <div id="toast" class="fixed bottom-5 left-5 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 transition-transform duration-300 translate-y-24 z-50">
+        <i class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
+        <span id="toast-message">تمت العملية بنجاح!</span>
+    </div>
+
+    <script>
+        // Initial Dataset
+        let shipmentsData = [
+            {
+                id: 'TRK-982341',
+                customer: 'مؤسسة الأمل للتوريدات',
+                destination: 'القاهرة، المعادي',
+                courier: 'أحمد محمود',
+                status: 'in_transit',
+                weight: '4.2 كجم',
+                updated: 'منذ 15 دقيقة',
+                lat: 30.0444,
+                lng: 31.2357,
+                timeline: [
+                    { title: 'تم إنشاء الطلب', date: 'اليوم، 09:00 ص', done: true },
+                    { title: 'تم الاستلام من المخزن', date: 'اليوم، 11:30 ص', done: true },
+                    { title: 'خرجت للتوصيل مع المندوب', date: 'اليوم، 01:15 م', done: true },
+                    { title: 'تسليم العميل', date: 'متوقع خلال ساعتين', done: false }
+                ]
+            },
+            {
+                id: 'TRK-982342',
+                customer: 'شركة الأفق البرمجية',
+                destination: 'الإسكندرية، سموحة',
+                courier: 'مصطفى حسن',
+                status: 'delivered',
+                weight: '1.8 كجم',
+                updated: 'منذ ساعتين',
+                lat: 31.2001,
+                lng: 29.9187,
+                timeline: [
+                    { title: 'تم إنشاء الطلب', date: 'أمس، 02:00 م', done: true },
+                    { title: 'تم الاستلام من المخزن', date: 'أمس، 05:00 م', done: true },
+                    { title: 'خرجت للتوصيل مع المندوب', date: 'اليوم، 08:00 ص', done: true },
+                    { title: 'تم التسليم للعميل بنجاح', date: 'اليوم، 01:30 م', done: true }
+                ]
+            },
+            {
+                id: 'TRK-982343',
+                customer: 'متجر التكنولوجيا الفائقة',
+                destination: 'الجيزة، 6 أكتوبر',
+                courier: 'إسلام علي',
+                status: 'delayed',
+                weight: '12.0 كجم',
+                updated: 'منذ 4 ساعات',
+                lat: 29.9870,
+                lng: 30.9515,
+                timeline: [
+                    { title: 'تم إنشاء الطلب', date: 'أمس، 10:00 ص', done: true },
+                    { title: 'تم الاستلام من المخزن', date: 'أمس، 01:00 م', done: true },
+                    { title: 'تأخير بسبب حالة الطقس/المرور', date: 'اليوم، 10:00 ص', done: false, error: true },
+                    { title: 'تسليم العميل', date: 'معلق', done: false }
+                ]
+            },
+            {
+                id: 'TRK-982344',
+                customer: 'صيدليات الشفاء',
+                destination: 'المنصورة، الحي الثاني',
+                courier: 'خالد عبدالله',
+                status: 'pending',
+                weight: '0.5 كجم',
+                updated: 'منذ 30 دقيقة',
+                lat: 31.0409,
+                lng: 31.3785,
+                timeline: [
+                    { title: 'تم إنشاء الطلب', date: 'اليوم، 02:00 م', done: true },
+                    { title: 'في انتظار التجهيز بالمخزن', date: 'جاري العمل', done: false },
+                    { title: 'تسليم للمندوب', date: 'قيد الانتظار', done: false }
+                ]
+            },
+            {
+                id: 'TRK-982345',
+                customer: 'مجموعات السلام التجارية',
+                destination: 'طنطا، شارع الجيش',
+                courier: 'سامح إبراهيم',
+                status: 'delivered',
+                weight: '3.0 كجم',
+                updated: 'منذ يوم واحد',
+                lat: 30.7865,
+                lng: 31.0004,
+                timeline: [
+                    { title: 'تم إنشاء الطلب', date: '29 سبتمبر، 09:00 ص', done: true },
+                    { title: 'تم الاستلام من المخزن', date: '29 سبتمبر، 12:00 م', done: true },
+                    { title: 'خرجت للتوصيل', date: '30 سبتمبر، 09:00 ص', done: true },
+                    { title: 'تم التسليم بنجاح', date: '30 سبتمبر، 04:00 م', done: true }
+                ]
+            }
+        ];
+
+        let currentFilter = 'all';
+        let searchQuery = '';
+        let currentPage = 1;
+        const itemsPerPage = 5;
+        let mapInstance = null;
+
+        // Initialization
+        window.onload = function() {
+            updateKPIs();
+            renderTable();
+        };
+
+        // Status Badge Mapper
+        function getStatusBadgeHTML(status) {
+            switch (status) {
+                case 'in_transit':
+                    return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                                <span class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>جاري التوصيل
+                            </span>`;
+                case 'delivered':
+                    return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>تم التسليم
+                            </span>`;
+                case 'delayed':
+                    return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                                <span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>معلقة / تأخير
+                            </span>`;
+                case 'pending':
+                    return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">
+                                <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>قيد المعالجة
+                            </span>`;
+                default:
+                    return '';
+            }
+        }
+
+        function updateKPIs() {
+            const total = shipmentsData.length;
+            const inTransit = shipmentsData.filter(s => s.status === 'in_transit').length;
+            const delivered = shipmentsData.filter(s => s.status === 'delivered').length;
+            const delayed = shipmentsData.filter(s => s.status === 'delayed').length;
+            const pending = shipmentsData.filter(s => s.status === 'pending').length;
+
+            document.getElementById('kpi-total').innerText = total;
+            document.getElementById('kpi-transit').innerText = inTransit;
+            document.getElementById('kpi-delivered').innerText = delivered;
+            document.getElementById('kpi-delayed').innerText = delayed;
+
+            // Badges inside tabs
+            document.getElementById('badge-all').innerText = `(${total})`;
+            document.getElementById('badge-transit').innerText = `(${inTransit})`;
+            document.getElementById('badge-delivered').innerText = `(${delivered})`;
+            document.getElementById('badge-pending').innerText = `(${pending})`;
+            document.getElementById('badge-delayed').innerText = `(${delayed})`;
+        }
+
+        function setFilter(status) {
+            currentFilter = status;
+            currentPage = 1;
+            
+            // Tab styling update
+            document.querySelectorAll('.filter-tab').forEach(btn => {
+                if (btn.dataset.status === status) {
+                    btn.className = 'filter-tab active text-sm font-semibold px-4 py-2 rounded-lg whitespace-nowrap bg-slate-900 text-white transition';
+                } else {
+                    btn.className = 'filter-tab text-sm font-medium text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-lg whitespace-nowrap transition';
+                }
+            });
+
+            renderTable();
+        }
+
+        function handleGlobalSearch() {
+            searchQuery = document.getElementById('global-search').value.toLowerCase().trim();
+            currentPage = 1;
+            renderTable();
+        }
+
+        function getFilteredData() {
+            return shipmentsData.filter(item => {
+                const matchesStatus = (currentFilter === 'all') || (item.status === currentFilter);
+                const matchesSearch = item.id.toLowerCase().includes(searchQuery) ||
+                                      item.customer.toLowerCase().includes(searchQuery) ||
+                                      item.destination.toLowerCase().includes(searchQuery);
+                return matchesStatus && matchesSearch;
+            });
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('shipments-table-body');
+            const emptyState = document.getElementById('empty-state');
+            let filtered = getFilteredData();
+
+            // Sorting logic
+            const sortVal = document.getElementById('sort-select').value;
+            if (sortVal === 'customer') {
+                filtered.sort((a,b) => a.customer.localeCompare(b.customer));
+            }
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                
+                // Pagination slicing
+                const startIndex = (currentPage - 1) * itemsPerPage;
+                const paginatedItems = filtered.slice(startIndex, startIndex + itemsPerPage);
+
+                tbody.innerHTML = paginatedItems.map(item => `
+                    <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+                        <td class="px-6 py-4 font-bold text-slate-900">${item.id}</td>
+                        <td class="px-6 py-4 font-medium text-slate-800">${item.customer}</td>
+                        <td class="px-6 py-4 text-slate-600">${item.destination}</td>
+                        <td class="px-6 py-4 text-slate-600">${item.courier}</td>
+                        <td class="px-6 py-4">${getStatusBadgeHTML(item.status)}</td>
+                        <td class="px-6 py-4 text-xs text-slate-500">${item.updated}</td>
+                        <td class="px-6 py-4 text-center">
+                            <button onclick="openDetailModal('${item.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition">
+                                <i class="fa-solid fa-eye ml-1"></i> التفاصيل
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // Update pagination controls
+                document.getElementById('showing-start').innerText = startIndex + 1;
+                document.getElementById('showing-end').innerText = Math.min(startIndex + itemsPerPage, filtered.length);
+                document.getElementById('showing-total').innerText = filtered.length;
+                
+                document.getElementById('btn-prev').disabled = currentPage === 1;
+                document.getElementById('btn-next').disabled = (currentPage * itemsPerPage) >= filtered.length;
+                document.getElementById('page-num').innerText = `صفحة ${currentPage}`;
+            }
+        }
+
+        function changePage(direction) {
+            currentPage += direction;
+            renderTable();
+        }
+
+        function resetFilters() {
+            document.getElementById('global-search').value = '';
+            searchQuery = '';
+            setFilter('all');
+        }
+
+        function openDetailModal(id) {
+            const shipment = shipmentsData.find(s => s.id === id);
+            if (!shipment) return;
+
+            document.getElementById('modal-tracking-id').innerText = shipment.id;
+            document.getElementById('modal-customer').innerText = shipment.customer;
+            document.getElementById('modal-destination').innerText = shipment.destination;
+            document.getElementById('modal-courier').innerText = shipment.courier;
+            document.getElementById('modal-weight').innerText = shipment.weight;
+            document.getElementById('modal-status-badge').innerHTML = getStatusBadgeHTML(shipment.status);
+
+            // Render Timeline
+            const timelineContainer = document.getElementById('modal-timeline');
+            timelineContainer.innerHTML = shipment.timeline.map((step, idx) => `
+                <div class="relative pr-6">
+                    <div class="absolute -right-2 top-1 w-4 h-4 rounded-full border-2 border-white ${
+                        step.done ? 'bg-blue-600 ring-2 ring-blue-100' : (step.error ? 'bg-amber-500' : 'bg-slate-300')
+                    }"></div>
+                    <p class="text-xs font-bold ${step.done ? 'text-slate-900' : 'text-slate-500'}">${step.title}</p>
+                    <span class="text-[10px] text-slate-400 block">${step.date}</span>
+                </div>
+            `).join('');
+
+            // Open Modal UI
+            const modal = document.getElementById('detail-modal');
+            const card = document.getElementById('detail-modal-card');
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            card.classList.remove('scale-95');
+            card.classList.add('scale-100');
+
+            // Initialize/Update Map
+            setTimeout(() => {
+                if (!mapInstance) {
+                    mapInstance = L.map('tracking-map').setView([shipment.lat, shipment.lng], 12);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; OpenStreetMap'
+                    }).addTo(mapInstance);
+                } else {
+                    mapInstance.setView([shipment.lat, shipment.lng], 12);
+                }
+
+                // Clear markers
+                mapInstance.eachLayer((layer) => {
+                    if (!!layer.toGeoJSON) {
+                        mapInstance.removeLayer(layer);
+                    }
+                });
+
+                // Add Marker
+                L.marker([shipment.lat, shipment.lng])
+                    .addTo(mapInstance)
+                    .bindPopup(`<b>${shipment.id}</b><br>${shipment.customer}`)
+                    .openPopup();
+                
+                mapInstance.invalidateSize();
+            }, 200);
+        }
+
+        function closeDetailModal() {
+            const modal = document.getElementById('detail-modal');
+            const card = document.getElementById('detail-modal-card');
+            card.classList.remove('scale-100');
+            card.classList.add('scale-95');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+        }
+
+        // Add Shipment Modal Handling
+        function openAddModal() {
+            const modal = document.getElementById('add-modal');
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+        }
+
+        function closeAddModal() {
+            const modal = document.getElementById('add-modal');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+        }
+
+        function handleAddShipment(event) {
+            event.preventDefault();
+            const customer = document.getElementById('input-customer').value;
+            const destination = document.getElementById('input-destination').value;
+            const courier = document.getElementById('input-courier').value;
+            const status = document.getElementById('input-status').value;
+            const weight = document.getElementById('input-weight').value || '1.0 كجم';
+
+            const newId = `TRK-${Math.floor(100000 + Math.random() * 900000)}`;
+
+            const newShipment = {
+                id: newId,
+                customer,
+                destination,
+                courier,
+                status,
+                weight,
+                updated: 'الآن',
+                lat: 30.0444 + (Math.random() - 0.5) * 0.1,
+                lng: 31.2357 + (Math.random() - 0.5) * 0.1,
+                timeline: [
+                    { title: 'تم إنشاء الطلب', date: 'الآن', done: true },
+                    { title: 'في انتظار التجهيز', date: 'قيد الإجراء', done: false }
+                ]
+            };
+
+            shipmentsData.unshift(newShipment);
+            updateKPIs();
+            renderTable();
+            closeAddModal();
+            document.getElementById('add-shipment-form').reset();
+
+            showToast(`تم إضافة الشحنة الجديدة ${newId} بنجاح!`);
+        }
+
+        function refreshData() {
+            const icon = document.getElementById('refresh-icon');
+            icon.classList.add('fa-spin');
+            setTimeout(() => {
+                icon.classList.remove('fa-spin');
+                renderTable();
+                showToast('تم تحديث بيانات الشحنات المباشرة');
+            }, 600);
+        }
+
+        function exportReport() {
+            showToast('جاري تحضير وتنزيل ملف التقرير (CSV)...');
+        }
+
+        function printShipmentLabel() {
+            showToast('جاري فتح أمر الطباعة لبوليصة الشحن...');
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = msg;
+            toast.classList.remove('translate-y-24');
+            setTimeout(() => {
+                toast.classList.add('translate-y-24');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
